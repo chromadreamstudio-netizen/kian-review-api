@@ -16,7 +16,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# تحديد شكل البيانات القادمة من Next.js
 class AnalyzeRequest(BaseModel):
     url: str
 
@@ -24,9 +23,8 @@ class AnalyzeRequest(BaseModel):
 def analyze_competitor(req: AnalyzeRequest):
     print(f"🚀 جاري تحليل الرابط: {req.url}")
     
-    # جلب المفاتيح من متغيرات البيئة بشكل آمن
-    apify_token = os.environ.get("APIFY_API_TOKEN")
-    gemini_key = os.environ.get("GEMINI_API_KEY")
+    apify_token = os.environ.get("APIFY_API_TOKEN", "").strip()
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     
     if not apify_token or not gemini_key:
          print("❌ خطأ: المفاتيح غير متوفرة في بيئة Render")
@@ -36,35 +34,35 @@ def analyze_competitor(req: AnalyzeRequest):
     run_input = {
         "startUrls": [{"url": req.url}],
         "geminiApiKey": gemini_key,
-        "maxReviews": 100
+        "maxReviews": 50
     }
 
     try:
-        # قمنا بإزالة الكلمة الخاطئة لأن الأداة تنتظر النتيجة تلقائياً
-        print("⏳ جاري الاتصال بـ Apify (قد يستغرق الأمر دقيقة أو أكثر)...")
-        run = client.actor("linenlike_summer/ai-review-miner").call(run_input=run_input)
-        print("✅ اكتمل الاتصال واستخراج البيانات من Apify")
+        print("⏳ جاري الاتصال بـ Apify...")
+        # استخدام المعرف المباشر للأداة لضمان الوصول الفوري
+        run = client.actor("5gKtPDWkYDdFCibky").call(run_input=run_input)
         
-        # استخراج المعرف
-        if isinstance(run, dict):
-            dataset_id = run.get("defaultDatasetId") or run.get("default_dataset_id")
-        else:
-            dataset_id = getattr(run, "default_dataset_id", getattr(run, "defaultDatasetId", None))
+        if not run:
+            print("❌ خطأ: Apify لم يرجع أي بيانات تشغيل (تحقق من صلاحية API Token)")
+            raise HTTPException(status_code=500, detail="فشل بدء التشغيل في Apify")
 
-        if not dataset_id:
-            print("❌ خطأ: لم يتم العثور على قاعدة البيانات")
-            raise HTTPException(status_code=500, detail="لم يتم العثور على قاعدة البيانات")
+        run_status = run.get("status")
+        dataset_id = run.get("defaultDatasetId")
+        print(f"✅ انتهى Apify بحالة: {run_status} | معرف قاعدة البيانات: {dataset_id}")
+        
+        if run_status != "SUCCEEDED":
+            raise HTTPException(status_code=500, detail=f"فشل تشغيل الأداة في Apify بحالة: {run_status}")
 
         # جلب التقرير وإرساله إلى Next.js
         dataset_items = client.dataset(dataset_id).list_items().items
         if dataset_items:
-            print("🎉 تم إرسال التقرير بنجاح إلى الواجهة")
+            print("🎉 تم جلب التقرير بنجاح وإرساله إلى الواجهة!")
             return dataset_items[0] 
         else:
-            print("❌ خطأ: قاعدة البيانات فارغة")
-            raise HTTPException(status_code=404, detail="لم يتم العثور على نتائج")
+            print("❌ خطأ: الأداة عملت في Apify ولكنها لم تحفظ نتائج (تحقق من مفتاح Gemini أو الرابط)")
+            raise HTTPException(status_code=404, detail="لم يتم العثور على نتائج داخل قاعدة البيانات")
             
     except Exception as e:
-        print("💥 حدث خطأ داخلي في الخادم:")
-        traceback.print_exc() # هذا السطر سيطبع سبب المشكلة بدقة متناهية في Render
+        print("💥 تفاصيل الخطأ الداخلي:")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
