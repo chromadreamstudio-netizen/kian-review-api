@@ -1,4 +1,5 @@
 import os
+import traceback
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -28,6 +29,7 @@ def analyze_competitor(req: AnalyzeRequest):
     gemini_key = os.environ.get("GEMINI_API_KEY")
     
     if not apify_token or not gemini_key:
+         print("❌ خطأ: المفاتيح غير متوفرة في بيئة Render")
          raise HTTPException(status_code=500, detail="خطأ في إعدادات الخادم: المفاتيح غير متوفرة")
 
     client = ApifyClient(apify_token)
@@ -38,8 +40,10 @@ def analyze_competitor(req: AnalyzeRequest):
     }
 
     try:
-        # تشغيل الأداة السحابية مع إخبار الخادم بالانتظار حتى 120 ثانية لإنهاء التحليل الضخم
-        run = client.actor("linenlike_summer/ai-review-miner").call(run_input=run_input, timeout_secs=120)
+        # قمنا بإزالة الكلمة الخاطئة لأن الأداة تنتظر النتيجة تلقائياً
+        print("⏳ جاري الاتصال بـ Apify (قد يستغرق الأمر دقيقة أو أكثر)...")
+        run = client.actor("linenlike_summer/ai-review-miner").call(run_input=run_input)
+        print("✅ اكتمل الاتصال واستخراج البيانات من Apify")
         
         # استخراج المعرف
         if isinstance(run, dict):
@@ -48,14 +52,19 @@ def analyze_competitor(req: AnalyzeRequest):
             dataset_id = getattr(run, "default_dataset_id", getattr(run, "defaultDatasetId", None))
 
         if not dataset_id:
+            print("❌ خطأ: لم يتم العثور على قاعدة البيانات")
             raise HTTPException(status_code=500, detail="لم يتم العثور على قاعدة البيانات")
 
         # جلب التقرير وإرساله إلى Next.js
         dataset_items = client.dataset(dataset_id).list_items().items
         if dataset_items:
-            return dataset_items[0] # هذا سيرسل الـ JSON مباشرة إلى الواجهة
+            print("🎉 تم إرسال التقرير بنجاح إلى الواجهة")
+            return dataset_items[0] 
         else:
+            print("❌ خطأ: قاعدة البيانات فارغة")
             raise HTTPException(status_code=404, detail="لم يتم العثور على نتائج")
             
     except Exception as e:
+        print("💥 حدث خطأ داخلي في الخادم:")
+        traceback.print_exc() # هذا السطر سيطبع سبب المشكلة بدقة متناهية في Render
         raise HTTPException(status_code=500, detail=str(e))
