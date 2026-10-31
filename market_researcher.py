@@ -34,7 +34,7 @@ def analyze_competitor(req: AnalyzeRequest):
     run_input = {
         "startUrls": [{"url": req.url}],
         "geminiApiKey": gemini_key,
-        "maxReviews": 10
+        "maxReviews": 100
     }
 
     try:
