@@ -38,8 +38,8 @@ def analyze_competitor(req: AnalyzeRequest):
     }
 
     try:
-        # تشغيل الأداة السحابية
-        run = client.actor("linenlike_summer/ai-review-miner").call(run_input=run_input)
+        # تشغيل الأداة السحابية مع إخبار الخادم بالانتظار حتى 120 ثانية لإنهاء التحليل الضخم
+        run = client.actor("linenlike_summer/ai-review-miner").call(run_input=run_input, timeout_secs=120)
         
         # استخراج المعرف
         if isinstance(run, dict):
